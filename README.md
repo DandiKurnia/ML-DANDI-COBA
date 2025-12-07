@@ -59,19 +59,20 @@ Data dikirim ke REST API dalam format berikut:
 | avg_completion_ratio  | Rasio penyelesaian vs estimasi modul |
 | avg_submission_rating | Rata-rata rating tugas               |
 
+---
+
 ## ⚙️ Proses Konversi Data Backend
 
 Sebelum data dapat digunakan untuk prediksi oleh Flask API, backend harus melakukan konversi dari data mentah ke format yang sesuai. Berdasarkan query SQL berikut:
 
-```
+```sql
 SELECT
   djc.user_id,
-  COUNT(djc.journey_id)                  AS module_count,
-  SUM(djc.study_duration)                AS total_study_duration,
-  AVG(djc.study_duration)                AS avg_study_per_module,
-  AVG(djc.study_duration::float / dj.duration)
-                                       AS avg_completion_ratio,
-  AVG(djc.avg_submission_rating)         AS avg_submission_rating
+  COUNT(djc.journey_id)                             AS module_count,
+  SUM(djc.study_duration)                           AS total_study_duration,
+  AVG(djc.study_duration)                           AS avg_study_per_module,
+  AVG(djc.study_duration::float / dj.duration)      AS avg_completion_ratio,
+  AVG(djc.avg_submission_rating)                    AS avg_submission_rating
 FROM "DeveloperJourneyCompletion" djc
 JOIN "DeveloperJourney" dj
   ON djc.journey_id = dj.id
@@ -79,21 +80,20 @@ GROUP BY djc.user_id
 ORDER BY djc.user_id;
 ```
 
-### 🧠 TUJUAN QUERY (DALAM BAHASA MANUSIA)
+### 🧠 Tujuan Query (Dalam Bahasa Manusia)
 
-Mengubah data mentah per modul (journey) menjadi ringkasan perilaku belajar per user, yang kemudian dipakai sebagai input model Machine Learning.
+Query ini bertujuan untuk **mengubah data mentah per modul (journey) menjadi ringkasan perilaku belajar per user**, yang kemudian dipakai sebagai input model Machine Learning.
 
-Awalnya:
+**Transformasi data:**
 
-1 baris = 1 user, 1 modul
+- **Sebelum:** 1 baris = 1 user untuk 1 modul
+- **Sesudah:** 1 baris = 1 user (ringkasan semua modul)
 
-Setelah query:
+---
 
-1 baris = 1 user (ringkasan semua modul)
+### 🔢 Contoh Data Mentah
 
-### 🔢 MISAL DATA MENTAH (CONTOH)
-
-Tabel DeveloperJourney (Estimasi Ideal)
+**Tabel DeveloperJourney (Estimasi Ideal)**
 
 | journey_id | modul | duration (menit) |
 | ---------- | ----- | ---------------- |
@@ -101,7 +101,7 @@ Tabel DeveloperJourney (Estimasi Ideal)
 | 2          | CSS   | 1920             |
 | 3          | HTML  | 1440             |
 
-Tabel DeveloperJourneyCompletion (Real Study)
+**Tabel DeveloperJourneyCompletion (Real Study)**
 
 | user_id | journey_id | study_duration | rating |
 | ------- | ---------- | -------------- | ------ |
@@ -109,117 +109,115 @@ Tabel DeveloperJourneyCompletion (Real Study)
 | 10      | 2          | 1600           | 4.2    |
 | 10      | 3          | 1800           | 4.0    |
 
-### 📌 PENJELASAN TIAP BAGIAN QUERY (MATEMATIS)
+---
+
+### 📌 Penjelasan Tiap Bagian Query (Matematis)
 
 #### 1️⃣ COUNT(djc.journey_id) AS module_count
 
-**Makna manusia:**
-
+**Makna:**  
 Berapa modul yang diikuti user
 
-**Matematika:**
-
-Jika user mengikuti n modul:
-
+**Formula Matematika:**
+```
 module_count = n
+```
+(n = jumlah modul)
 
-**Contoh:**
+**Contoh:**  
+User 10 ikut Java, CSS, HTML  
+✅ `module_count = 3`
 
-User 10 ikut:
-
-- Java
-- CSS
-- HTML
-
-✅ module_count = 3
+---
 
 #### 2️⃣ SUM(djc.study_duration) AS total_study_duration
 
-**Makna manusia:**
-
+**Makna:**  
 Total waktu belajar user di semua modul
 
-**Matematika:**
+**Formula Matematika:**
+```
+total_study_duration = Σ(i=1 to n) dᵢ
+```
+(dᵢ = durasi modul ke-i)
 
-Jika durasi tiap modul: d₁, d₂, ..., dₙ
+**Contoh:**  
+2100 + 1600 + 1800 = 5500 menit  
+✅ `total_study_duration = 5500`
 
-total_study_duration = ∑ᵢ₌₁ⁿ dᵢ
-
-**Contoh:**
-
-2100 + 1600 + 1800 = 5500 menit
-
-✅ total_study_duration = 5500
+---
 
 #### 3️⃣ AVG(djc.study_duration) AS avg_study_per_module
 
-**Makna manusia:**
-
+**Makna:**  
 Rata-rata waktu belajar per modul
 
-**Matematika:**
+**Formula Matematika:**
+```
+avg_study_per_module = (1/n) × Σ(i=1 to n) dᵢ
+```
 
-avg_study_per_module = (1/n) × ∑ᵢ₌₁ⁿ dᵢ
+**Contoh:**  
+5500 / 3 = 1833.33 menit  
+✅ `avg_study_per_module ≈ 1833`
 
-**Contoh:**
-
-5500 / 3 = 1833.33 menit
-
-✅ avg_study_per_module ≈ 1833
+---
 
 #### 4️⃣ AVG(djc.study_duration::float / dj.duration) AS avg_completion_ratio
 
 ⚠️ **INI BAGIAN PALING PENTING**
 
-**Makna manusia:**
-
+**Makna:**  
 Seberapa cepat atau lambat user menyelesaikan modul, dibanding waktu ideal modul tersebut
 
-Untuk tiap modul:
-
+**Formula Matematika:**
+```
 completion_ratioᵢ = waktu_belajar_aktualᵢ / estimasi_modulᵢ
 
-**Contoh per modul:**
+avg_completion_ratio = (1/n) × Σ(i=1 to n) completion_ratioᵢ
+```
+
+**Contoh perhitungan per modul:**
 
 | Modul | Aktual | Ideal | Rasio |
 | ----- | ------ | ----- | ----- |
 | Java  | 2100   | 2400  | 0.875 |
-| CSS   | 1600   | 1920  | 0.83  |
-| HTML  | 1800   | 1440  | 1.25  |
+| CSS   | 1600   | 1920  | 0.833 |
+| HTML  | 1800   | 1440  | 1.250 |
 
 Rata-rata rasio:
+```
+avg_completion_ratio = (0.875 + 0.833 + 1.250) / 3 = 0.986
+```
+✅ `avg_completion_ratio ≈ 0.99`
 
-avg_completion_ratio = (0.875 + 0.83 + 1.25) / 3 = 0.985
+**Interpretasi:**
+- **< 1.0** → lebih lambat dari estimasi
+- **≈ 1.0** → sesuai estimasi
+- **> 1.0** → lebih cepat dari estimasi
 
-✅ avg_completion_ratio ≈ 0.99
-
-**📌 Makna:**
-
-- < 1 → lebih lambat dari estimasi
-- ≈ 1 → sesuai estimasi
-- > 1 → lebih cepat
+---
 
 #### 5️⃣ AVG(djc.avg_submission_rating) AS avg_submission_rating
 
-**Makna manusia:**
-
+**Makna:**  
 Kualitas hasil belajar user
 
-**Matematika:**
+**Formula Matematika:**
+```
+avg_submission_rating = (1/n) × Σ(i=1 to n) rᵢ
+```
+(rᵢ = rating modul ke-i)
 
-Jika rating: r₁, r₂, ..., rₙ
+**Contoh:**  
+(4.5 + 4.2 + 4.0) / 3 = 4.23  
+✅ `avg_submission_rating ≈ 4.23`
 
-avg_submission_rating = (1/n) × ∑ᵢ₌₁ⁿ rᵢ
+---
 
-**Contoh:**
+### 🧠 Kesimpulan Agregasi untuk 1 User
 
-(4.5 + 4.2 + 4.0) / 3 = 4.23
-
-✅ avg_submission_rating ≈ 4.23
-
-### 🧠 KESIMPULAN KHUSUS UNTUK 1 USER
-
-Dari data mentah:
+Dari data mentah di atas, hasil agregasi untuk User 10:
 
 | Parameter             | Nilai |
 | --------------------- | ----- |
@@ -231,7 +229,9 @@ Dari data mentah:
 
 ➡️ **INI 1 BARIS INPUT MODEL ML**
 
-### ✅ HUBUNGAN KE LABEL GAYA BELAJAR
+---
+
+### ✅ Hubungan ke Label Gaya Belajar
 
 ```python
 if avg_completion_ratio >= 1.10:
@@ -242,21 +242,26 @@ else:
     Consistent
 ```
 
-**Untuk contoh:**
+**Untuk contoh di atas:**  
+0.99 → **Reflective Learner** ✅
 
-0.99 → Reflective ✅
+---
+
+### 📋 Tugas Backend
 
 Backend perlu:
 
-1. Mengambil data dari tabel DeveloperJourneyCompletion dan DeveloperJourney
-2. Menghitung agregasi per user_id sesuai dengan kolom-kolom yang diminta
+1. Mengambil data dari tabel `DeveloperJourneyCompletion` dan `DeveloperJourney`
+2. Menghitung agregasi per `user_id` sesuai dengan kolom-kolom yang diminta
 3. Mengirim data dalam format JSON seperti yang telah dijelaskan di atas
+
+---
 
 ## 📐 Aturan Klasifikasi Gaya Belajar (IMPLEMENTASI SEBENARNYA)
 
 Berdasarkan kode implementasi sebenarnya dalam file `training_model_gaya_belajar_per_modul.py`, aturan klasifikasi adalah sebagai berikut:
 
-### 🔹 KODE ATURAN ASLI
+### 🔹 Kode Aturan Asli
 
 ```python
 def label_gaya_belajar(row):
@@ -268,7 +273,9 @@ def label_gaya_belajar(row):
         return "Consistent"
 ```
 
-## ✅ 1️⃣ FAST LEARNER — PENJELASAN & PERHITUNGAN
+---
+
+## ✅ 1️⃣ FAST LEARNER — Penjelasan & Perhitungan
 
 ### Definisi
 
@@ -302,7 +309,9 @@ avg_completion_ratio ≥ 1.1
 
 Fast Learner adalah siswa yang menyelesaikan modul 10% lebih cepat dari estimasi waktu yang diberikan.
 
-## ✅ 2️⃣ REFLECTIVE LEARNER — PENJELASAN & PERHITUNGAN
+---
+
+## ✅ 2️⃣ REFLECTIVE LEARNER — Penjelasan & Perhitungan
 
 ### Definisi
 
@@ -337,7 +346,9 @@ avg_completion_ratio ≥ 0.85 DAN avg_completion_ratio < 1.1
 
 Reflective Learner adalah siswa yang menyelesaikan modul dalam waktu mendekati estimasi, menunjukkan pembelajaran yang stabil dan mendalam.
 
-## ✅ 3️⃣ CONSISTENT LEARNER — PENJELASAN & PERHITUNGAN
+---
+
+## ✅ 3️⃣ CONSISTENT LEARNER — Penjelasan & Perhitungan
 
 ### Definisi
 
@@ -371,6 +382,8 @@ avg_completion_ratio < 0.85
 
 Consistent Learner adalah siswa yang membutuhkan waktu lebih lama dari estimasi untuk menyelesaikan modul, namun tetap konsisten dalam belajar.
 
+---
+
 ## 🎓 Peran Rating Submission
 
 Field `avg_submission_rating` TIDAK menentukan gaya belajar secara langsung, namun digunakan untuk:
@@ -379,9 +392,11 @@ Field `avg_submission_rating` TIDAK menentukan gaya belajar secara langsung, nam
 - Insight tambahan
 - Evaluasi kualitas pemahaman
 
+---
+
 ## 📤 Output API
 
-```
+```json
 {
   "status": "success",
   "gaya_belajar": "Fast Learner",
@@ -393,6 +408,8 @@ Field `avg_submission_rating` TIDAK menentukan gaya belajar secara langsung, nam
   ]
 }
 ```
+
+---
 
 ## ✅ Kesimpulan
 
