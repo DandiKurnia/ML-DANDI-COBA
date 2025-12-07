@@ -63,7 +63,7 @@ Data dikirim ke REST API dalam format berikut:
 
 Sebelum data dapat digunakan untuk prediksi oleh Flask API, backend harus melakukan konversi dari data mentah ke format yang sesuai. Berdasarkan query SQL berikut:
 
-```sql
+```
 SELECT
   djc.user_id,
   COUNT(djc.journey_id)                  AS module_count,
@@ -79,33 +79,172 @@ GROUP BY djc.user_id
 ORDER BY djc.user_id;
 ```
 
-### 🧮 Perhitungan Matematika avg_completion_ratio
+### 🧠 TUJUAN QUERY (DALAM BAHASA MANUSIA)
 
-Rasio penyelesaian (`avg_completion_ratio`) dihitung berdasarkan perbandingan antara waktu studi aktual dengan estimasi waktu penyelesaian modul:
+Mengubah data mentah per modul (journey) menjadi ringkasan perilaku belajar per user, yang kemudian dipakai sebagai input model Machine Learning.
 
+Awalnya:
+
+1 baris = 1 user, 1 modul
+
+Setelah query:
+
+1 baris = 1 user (ringkasan semua modul)
+
+### 🔢 MISAL DATA MENTAH (CONTOH)
+
+Tabel DeveloperJourney (Estimasi Ideal)
+
+| journey_id | modul | duration (menit) |
+| ---------- | ----- | ---------------- |
+| 1          | Java  | 2400             |
+| 2          | CSS   | 1920             |
+| 3          | HTML  | 1440             |
+
+Tabel DeveloperJourneyCompletion (Real Study)
+
+| user_id | journey_id | study_duration | rating |
+| ------- | ---------- | -------------- | ------ |
+| 10      | 1          | 2100           | 4.5    |
+| 10      | 2          | 1600           | 4.2    |
+| 10      | 3          | 1800           | 4.0    |
+
+### 📌 PENJELASAN TIAP BAGIAN QUERY (MATEMATIS)
+
+#### 1️⃣ COUNT(djc.journey_id) AS module_count
+
+**Makna manusia:**
+
+Berapa modul yang diikuti user
+
+**Matematika:**
+
+Jika user mengikuti n modul:
+
+module_count = n
+
+**Contoh:**
+
+User 10 ikut:
+
+- Java
+- CSS
+- HTML
+
+✅ module_count = 3
+
+#### 2️⃣ SUM(djc.study_duration) AS total_study_duration
+
+**Makna manusia:**
+
+Total waktu belajar user di semua modul
+
+**Matematika:**
+
+Jika durasi tiap modul: d₁, d₂, ..., dₙ
+
+total_study_duration = ∑ᵢ₌₁ⁿ dᵢ
+
+**Contoh:**
+
+2100 + 1600 + 1800 = 5500 menit
+
+✅ total_study_duration = 5500
+
+#### 3️⃣ AVG(djc.study_duration) AS avg_study_per_module
+
+**Makna manusia:**
+
+Rata-rata waktu belajar per modul
+
+**Matematika:**
+
+avg_study_per_module = (1/n) × ∑ᵢ₌₁ⁿ dᵢ
+
+**Contoh:**
+
+5500 / 3 = 1833.33 menit
+
+✅ avg_study_per_module ≈ 1833
+
+#### 4️⃣ AVG(djc.study_duration::float / dj.duration) AS avg_completion_ratio
+
+⚠️ **INI BAGIAN PALING PENTING**
+
+**Makna manusia:**
+
+Seberapa cepat atau lambat user menyelesaikan modul, dibanding waktu ideal modul tersebut
+
+Untuk tiap modul:
+
+completion_ratioᵢ = waktu_belajar_aktualᵢ / estimasi_modulᵢ
+
+**Contoh per modul:**
+
+| Modul | Aktual | Ideal | Rasio |
+| ----- | ------ | ----- | ----- |
+| Java  | 2100   | 2400  | 0.875 |
+| CSS   | 1600   | 1920  | 0.83  |
+| HTML  | 1800   | 1440  | 1.25  |
+
+Rata-rata rasio:
+
+avg_completion_ratio = (0.875 + 0.83 + 1.25) / 3 = 0.985
+
+✅ avg_completion_ratio ≈ 0.99
+
+**📌 Makna:**
+
+- < 1 → lebih lambat dari estimasi
+- ≈ 1 → sesuai estimasi
+- > 1 → lebih cepat
+
+#### 5️⃣ AVG(djc.avg_submission_rating) AS avg_submission_rating
+
+**Makna manusia:**
+
+Kualitas hasil belajar user
+
+**Matematika:**
+
+Jika rating: r₁, r₂, ..., rₙ
+
+avg_submission_rating = (1/n) × ∑ᵢ₌₁ⁿ rᵢ
+
+**Contoh:**
+
+(4.5 + 4.2 + 4.0) / 3 = 4.23
+
+✅ avg_submission_rating ≈ 4.23
+
+### 🧠 KESIMPULAN KHUSUS UNTUK 1 USER
+
+Dari data mentah:
+
+| Parameter             | Nilai |
+| --------------------- | ----- |
+| module_count          | 3     |
+| total_study_duration  | 5500  |
+| avg_study_per_module  | 1833  |
+| avg_completion_ratio  | 0.99  |
+| avg_submission_rating | 4.23  |
+
+➡️ **INI 1 BARIS INPUT MODEL ML**
+
+### ✅ HUBUNGAN KE LABEL GAYA BELAJAR
+
+```python
+if avg_completion_ratio >= 1.10:
+    Fast Learner
+elif avg_completion_ratio >= 0.85:
+    Reflective
+else:
+    Consistent
 ```
-avg_completion_ratio = rata-rata (study_duration / duration)
-```
 
-Dimana:
+**Untuk contoh:**
 
-- `study_duration` = durasi aktual yang dibutuhkan siswa untuk menyelesaikan suatu modul (dalam menit)
-- `duration` = estimasi waktu yang seharusnya dibutuhkan untuk menyelesaikan modul (dalam menit)
-
-Contoh perhitungan:
-Jika seorang siswa menyelesaikan 3 modul dengan data berikut:
-
-- Modul 1: study_duration = 120 menit, duration = 100 menit → rasio = 120/100 = 1.2
-- Modul 2: study_duration = 90 menit, duration = 100 menit → rasio = 90/100 = 0.9
-- Modul 3: study_duration = 150 menit, duration = 100 menit → rasio = 150/100 = 1.5
-
-Maka avg_completion_ratio = (1.2 + 0.9 + 1.5) / 3 = 1.2
-
-Interpretasi:
-
-- Jika rasio > 1.0: Siswa menyelesaikan modul lebih cepat dari estimasi
-- Jika rasio = 1.0: Siswa menyelesaikan modul sesuai estimasi
-- Jika rasio < 1.0: Siswa menyelesaikan modul lebih lambat dari estimasi
+0.99 → Reflective ✅
 
 Backend perlu:
 
@@ -242,7 +381,7 @@ Field `avg_submission_rating` TIDAK menentukan gaya belajar secara langsung, nam
 
 ## 📤 Output API
 
-```json
+```
 {
   "status": "success",
   "gaya_belajar": "Fast Learner",
