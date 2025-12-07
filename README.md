@@ -79,6 +79,34 @@ GROUP BY djc.user_id
 ORDER BY djc.user_id;
 ```
 
+### 🧮 Perhitungan Matematika avg_completion_ratio
+
+Rasio penyelesaian (`avg_completion_ratio`) dihitung berdasarkan perbandingan antara waktu studi aktual dengan estimasi waktu penyelesaian modul:
+
+```
+avg_completion_ratio = rata-rata (study_duration / duration)
+```
+
+Dimana:
+
+- `study_duration` = durasi aktual yang dibutuhkan siswa untuk menyelesaikan suatu modul (dalam menit)
+- `duration` = estimasi waktu yang seharusnya dibutuhkan untuk menyelesaikan modul (dalam menit)
+
+Contoh perhitungan:
+Jika seorang siswa menyelesaikan 3 modul dengan data berikut:
+
+- Modul 1: study_duration = 120 menit, duration = 100 menit → rasio = 120/100 = 1.2
+- Modul 2: study_duration = 90 menit, duration = 100 menit → rasio = 90/100 = 0.9
+- Modul 3: study_duration = 150 menit, duration = 100 menit → rasio = 150/100 = 1.5
+
+Maka avg_completion_ratio = (1.2 + 0.9 + 1.5) / 3 = 1.2
+
+Interpretasi:
+
+- Jika rasio > 1.0: Siswa menyelesaikan modul lebih cepat dari estimasi
+- Jika rasio = 1.0: Siswa menyelesaikan modul sesuai estimasi
+- Jika rasio < 1.0: Siswa menyelesaikan modul lebih lambat dari estimasi
+
 Backend perlu:
 
 1. Mengambil data dari tabel DeveloperJourneyCompletion dan DeveloperJourney
